@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"time"
+	"os"
 )
 
 var urlSt = make(map[string]string)
@@ -33,6 +33,7 @@ type Response struct {
 }
 
 func shorten(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
 	var req Request
 	json.NewDecoder(r.Body).Decode(&req)
 	short := shortcode(6)
@@ -47,6 +48,11 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func enableCORS(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
 func redirect(w http.ResponseWriter, r *http.Request) {
 	short := r.URL.Path[1:]
 	orig, exists := urlSt[short]
@@ -58,10 +64,13 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	http.HandleFunc("/shorten", shorten)
 
-	// Serve homepage
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			homePage(w, r)
@@ -70,7 +79,6 @@ func main() {
 		redirect(w, r)
 	})
 
-	fmt.Println("Server running on :8080")
-	http.ListenAndServe(":8080", nil)
-
+	fmt.Println("Server running on port:", port)
+	http.ListenAndServe(":"+port, nil)
 }
