@@ -6,24 +6,37 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
+	"time"
 )
 
-var urlSt = make(map[string]string)
+var urlStore = make(map[string]string)
 
-const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "index.html")
+// ------------------- CORS -------------------
+func enableCORS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	// Handle preflight request
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 }
 
-func shortcode(length int) string {
+// ------------------- UTIL -------------------
+func generateShortCode(length int) string {
 	code := make([]byte, length)
 	for i := range code {
-		code[i] = chars[rand.Intn(len(chars))]
+		code[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(code)
 }
 
+// ------------------- STRUCTS -------------------
 type Request struct {
 	URL string `json:"url"`
 }
@@ -32,51 +45,83 @@ type Response struct {
 	ShortURL string `json:"short_url"`
 }
 
-func shorten(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w)
-	var req Request
-	json.NewDecoder(r.Body).Decode(&req)
-	short := shortcode(6)
+// ------------------- HANDLERS -------------------
+func shortenHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
 
-	urlSt[short] = req.URL
+	// Allow only POST
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req Request
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Basic URL validation
+	if req.URL == "" || !strings.HasPrefix(req.URL, "http") {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
+
+	// Generate unique short code
+	var shortCode string
+	for {
+		shortCode = generateShortCode(6)
+		if _, exists := urlStore[shortCode]; !exists {
+			break
+		}
+	}
+
+	// Store mapping
+	urlStore[shortCode] = req.URL
 
 	resp := Response{
-		ShortURL: fmt.Sprintf("http://localhost:8080/%s", short),
+		ShortURL: fmt.Sprintf("https://url-shortener.onrender.com/%s", shortCode),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-func enableCORS(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-}
+func redirectHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, r)
 
-func redirect(w http.ResponseWriter, r *http.Request) {
-	short := r.URL.Path[1:]
-	orig, exists := urlSt[short]
+	shortCode := strings.TrimPrefix(r.URL.Path, "/")
+
+	originalURL, exists := urlStore[shortCode]
 	if !exists {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, orig, http.StatusFound)
+
+	http.Redirect(w, r, originalURL, http.StatusFound)
 }
 
+// ------------------- MAIN -------------------
 func main() {
+	// Seed random generator
+	rand.Seed(time.Now().UnixNano())
+
+	// Get PORT (Render requirement)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	http.HandleFunc("/shorten", shorten)
+	// Routes
+	http.HandleFunc("/shorten", shortenHandler)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			homePage(w, r)
+			http.ServeFile(w, r, "index.html")
 			return
 		}
-		redirect(w, r)
+		redirectHandler(w, r)
 	})
 
 	fmt.Println("Server running on port:", port)
