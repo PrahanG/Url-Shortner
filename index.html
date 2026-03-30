@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Go URL Shortener</title>
+    <style>
+        body {
+            font-family: Arial;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f4f4f4;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 350px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px;
+            width: 100%;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .result {
+            margin-top: 15px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>🔗 URL Shortener</h2>
+
+        <input type="text" id="urlInput" placeholder="Enter long URL" />
+
+        <button onclick="shorten()">Shorten</button>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        async function shorten() {
+            const url = document.getElementById("urlInput").value;
+
+            const response = await fetch("/shorten", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ url: url })
+            });
+
+            const data = await response.json();
+
+            document.getElementById("result").innerHTML =
+                `<a href="${data.short_url}" target="_blank">${data.short_url}</a>`;
+        }
+    </script>
+
+</body>
+
+</html>
